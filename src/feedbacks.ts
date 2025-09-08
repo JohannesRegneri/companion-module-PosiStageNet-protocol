@@ -3,30 +3,40 @@ import type { ModuleInstance } from './main.js'
 
 export function UpdateFeedbacks(self: ModuleInstance): void {
 	self.setFeedbackDefinitions({
-		ChannelState: {
-			name: 'Example Feedback',
+		tracker_active: {
+			name: 'Tracker Active',
 			type: 'boolean',
 			defaultStyle: {
-				bgcolor: combineRgb(255, 0, 0),
+				bgcolor: combineRgb(0, 255, 0),
 				color: combineRgb(0, 0, 0),
 			},
 			options: [
 				{
-					id: 'num',
+					id: 'tracker_id',
 					type: 'number',
-					label: 'Test',
-					default: 5,
-					min: 0,
-					max: 10,
+					label: 'Tracker ID',
+					default: 1,
+					min: 1,
+					max: 255,
 				},
 			],
 			callback: (feedback) => {
-				console.log('Hello world!', feedback.options.num)
-				if (Number(feedback.options.num) > 5) {
-					return true
-				} else {
-					return false
-				}
+				const trackerId = Number(feedback.options.tracker_id)
+				const trackerValue = self.getVariableValue(`tracker_${trackerId}_name`)
+				return trackerValue !== undefined && trackerValue !== ''
+			},
+		},
+		connection_status: {
+			name: 'Connection Status',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(0, 255, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [],
+			callback: () => {
+				const trackerCount = self.getVariableValue('tracker_count')
+				return trackerCount !== undefined && Number(trackerCount) > 0
 			},
 		},
 	})

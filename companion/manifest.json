@@ -1,16 +1,16 @@
 {
-	"id": "your-module-name",
-	"name": "your-module-name",
-	"shortname": "module-shortname",
-	"description": "A short one line description of your module",
-	"version": "0.0.0",
+	"id": "posistagenet-protocol",
+	"name": "PosiStageNet Protocol",
+	"shortname": "psn",
+	"description": "Connect to PosiStageNet tracking systems and access tracker data",
+	"version": "1.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-your-module-name.git",
-	"bugs": "https://github.com/bitfocus/companion-module-your-module-name/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-posistagenet-protocol.git",
+	"bugs": "https://github.com/bitfocus/companion-module-posistagenet-protocol/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "Jeffrey Davidsz",
+			"email": "jeffrey.davidsz@vicreo.eu"
 		}
 	],
 	"runtime": {
@@ -20,7 +20,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
-	"keywords": []
+	"manufacturer": "PosiStageNet",
+	"products": ["PosiStageNet Protocol"],
+	"keywords": ["tracking", "position", "stage", "psn", "motion", "realtime"]
 }

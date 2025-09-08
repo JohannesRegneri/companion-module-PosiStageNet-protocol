@@ -10,18 +10,19 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 		{
 			type: 'textinput',
 			id: 'host',
-			label: 'Target IP',
+			label: 'Multicast Address (default: 236.10.10.10)',
 			width: 8,
 			regex: Regex.IP,
+			default: '236.10.10.10',
 		},
 		{
 			type: 'number',
 			id: 'port',
-			label: 'Target Port',
+			label: 'Multicast Port (default: 56565)',
 			width: 4,
 			min: 1,
 			max: 65535,
-			default: 8000,
+			default: 56565,
 		},
 	]
 }

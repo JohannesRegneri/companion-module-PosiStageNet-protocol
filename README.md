@@ -1,4 +1,32 @@
-# companion-module-[replace with module name]
+# companion-module-posistagenet-protocol
+
+A Companion module for connecting to PosiStageNet tracking systems and accessing real-time tracker data.
+
+## Features
+
+- Connects to PosiStageNet servers via UDP multicast
+- Supports multiple trackers simultaneously
+- Exposes tracker data as Companion variables (position, speed, orientation, etc.)
+- Real-time updates of tracker information
+- Compatible with any PosiStageNet-enabled tracking system
+
+## Variables
+
+The module creates variables for each detected tracker:
+
+- `tracker_<id>_name` - Tracker name
+- `tracker_<id>_pos_x/y/z` - Position coordinates (meters)
+- `tracker_<id>_speed_x/y/z` - Velocity (meters/second)
+- `tracker_<id>_ori_x/y/z` - Orientation (radians)
+- `tracker_<id>_validity` - Tracker validity
+- `tracker_<id>_accel_x/y/z` - Acceleration (meters/second²)
+- `tracker_<id>_trgtpos_x/y/z` - Target position (meters)
+- `tracker_<id>_timestamp` - Tracker timestamp
+
+System variables:
+
+- `system_name` - PSN system name
+- `tracker_count` - Number of active trackers
 
 See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
