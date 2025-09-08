@@ -1,5 +1,5 @@
 {
-	"id": "posistagenet-protocol",
+	"id": "PosiStageNet-protocol",
 	"name": "PosiStageNet Protocol",
 	"shortname": "psn",
 	"description": "Connect to PosiStageNet tracking systems and access tracker data",
