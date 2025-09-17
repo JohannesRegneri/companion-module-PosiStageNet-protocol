@@ -54,6 +54,19 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		super(internal)
 	}
 
+	/**
+	 * Format a number rounded to at most 3 decimal places.
+	 * - Returns '' for non-finite numbers
+	 * - Trims trailing zeros (e.g., 1.2 not 1.200)
+	 */
+	private format3(value: number): string {
+		if (!Number.isFinite(value)) return ''
+		const rounded = Math.round(value * 1000) / 1000
+		// Avoid "-0"
+		if (Object.is(rounded, -0)) return '0'
+		return String(rounded)
+	}
+
 	private isMulticastAddress(host: string): boolean {
 		const parts = host.split('.')
 		if (parts.length !== 4) return false
@@ -82,6 +95,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.config = config
 		await this.closeConnection()
 		await this.initConnection()
+		// Rebuild variable definitions in case max_trackers changed
+		this.updateVariableDefinitions()
 	}
 
 	// Return config fields for web config
@@ -171,7 +186,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	private handleMessage(buffer: Buffer, _rinfo: RemoteInfo): void {
 		try {
-			const chunks = this.parseChunks(buffer, 0)
+			const chunks = this.parseChunks(buffer, 0, buffer.length)
 			for (const chunk of chunks) {
 				this.processChunk(chunk, buffer)
 			}
@@ -180,13 +195,20 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	private parseChunks(buffer: Buffer, offset: number): Array<{ header: ChunkHeader; offset: number }> {
+	private parseChunks(buffer: Buffer, offset: number, length: number): Array<{ header: ChunkHeader; offset: number }> {
 		const chunks: Array<{ header: ChunkHeader; offset: number }> = []
+		const end = Math.min(buffer.length, offset + length)
 
-		while (offset < buffer.length - 4) {
+		while (offset + 4 <= end) {
 			const header = this.parseChunkHeader(buffer, offset)
-			chunks.push({ header, offset: offset + 4 })
-			offset += 4 + header.dataLen
+			const dataStart = offset + 4
+			const dataEnd = dataStart + header.dataLen
+			if (dataEnd > end) {
+				// Malformed or truncated chunk, stop parsing within this region
+				break
+			}
+			chunks.push({ header, offset: dataStart })
+			offset = dataEnd
 		}
 
 		return chunks
@@ -217,8 +239,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	private processInfoPacket(buffer: Buffer, offset: number, _length: number): void {
-		const chunks = this.parseChunks(buffer, offset)
+	private processInfoPacket(buffer: Buffer, offset: number, length: number): void {
+		const chunks = this.parseChunks(buffer, offset, length)
 
 		for (const chunk of chunks) {
 			switch (chunk.header.id) {
@@ -240,8 +262,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	private processDataPacket(buffer: Buffer, offset: number, _length: number): void {
-		const chunks = this.parseChunks(buffer, offset)
+	private processDataPacket(buffer: Buffer, offset: number, length: number): void {
+		const chunks = this.parseChunks(buffer, offset, length)
 
 		for (const chunk of chunks) {
 			switch (chunk.header.id) {
@@ -255,8 +277,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	private processTrackerList(buffer: Buffer, offset: number, _length: number, isInfo: boolean): void {
-		const chunks = this.parseChunks(buffer, offset)
+	private processTrackerList(buffer: Buffer, offset: number, length: number, isInfo: boolean): void {
+		const chunks = this.parseChunks(buffer, offset, length)
 
 		for (const chunk of chunks) {
 			const trackerId = chunk.header.id
@@ -277,8 +299,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.updateTrackerVariables()
 	}
 
-	private processTrackerInfo(tracker: TrackerData, buffer: Buffer, offset: number, _length: number): void {
-		const chunks = this.parseChunks(buffer, offset)
+	private processTrackerInfo(tracker: TrackerData, buffer: Buffer, offset: number, length: number): void {
+		const chunks = this.parseChunks(buffer, offset, length)
 
 		for (const chunk of chunks) {
 			switch (chunk.header.id) {
@@ -289,51 +311,65 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
-	private processTrackerData(tracker: TrackerData, buffer: Buffer, offset: number, _length: number): void {
-		const chunks = this.parseChunks(buffer, offset)
+	private processTrackerData(tracker: TrackerData, buffer: Buffer, offset: number, length: number): void {
+		const chunks = this.parseChunks(buffer, offset, length)
 
 		for (const chunk of chunks) {
 			switch (chunk.header.id) {
 				case PSN_DATA_TRACKER_POS:
-					tracker.pos = {
-						x: buffer.readFloatLE(chunk.offset),
-						y: buffer.readFloatLE(chunk.offset + 4),
-						z: buffer.readFloatLE(chunk.offset + 8),
+					if (chunk.header.dataLen >= 12) {
+						tracker.pos = {
+							x: buffer.readFloatLE(chunk.offset),
+							y: buffer.readFloatLE(chunk.offset + 4),
+							z: buffer.readFloatLE(chunk.offset + 8),
+						}
 					}
 					break
 				case PSN_DATA_TRACKER_SPEED:
-					tracker.speed = {
-						x: buffer.readFloatLE(chunk.offset),
-						y: buffer.readFloatLE(chunk.offset + 4),
-						z: buffer.readFloatLE(chunk.offset + 8),
+					if (chunk.header.dataLen >= 12) {
+						tracker.speed = {
+							x: buffer.readFloatLE(chunk.offset),
+							y: buffer.readFloatLE(chunk.offset + 4),
+							z: buffer.readFloatLE(chunk.offset + 8),
+						}
 					}
 					break
 				case PSN_DATA_TRACKER_ORI:
-					tracker.ori = {
-						x: buffer.readFloatLE(chunk.offset),
-						y: buffer.readFloatLE(chunk.offset + 4),
-						z: buffer.readFloatLE(chunk.offset + 8),
+					if (chunk.header.dataLen >= 12) {
+						tracker.ori = {
+							x: buffer.readFloatLE(chunk.offset),
+							y: buffer.readFloatLE(chunk.offset + 4),
+							z: buffer.readFloatLE(chunk.offset + 8),
+						}
 					}
 					break
 				case PSN_DATA_TRACKER_STATUS:
-					tracker.validity = buffer.readFloatLE(chunk.offset)
+					if (chunk.header.dataLen >= 4) {
+						tracker.validity = buffer.readFloatLE(chunk.offset)
+					}
 					break
 				case PSN_DATA_TRACKER_ACCEL:
-					tracker.accel = {
-						x: buffer.readFloatLE(chunk.offset),
-						y: buffer.readFloatLE(chunk.offset + 4),
-						z: buffer.readFloatLE(chunk.offset + 8),
+					if (chunk.header.dataLen >= 12) {
+						tracker.accel = {
+							x: buffer.readFloatLE(chunk.offset),
+							y: buffer.readFloatLE(chunk.offset + 4),
+							z: buffer.readFloatLE(chunk.offset + 8),
+						}
 					}
 					break
 				case PSN_DATA_TRACKER_TRGTPOS:
-					tracker.trgtpos = {
-						x: buffer.readFloatLE(chunk.offset),
-						y: buffer.readFloatLE(chunk.offset + 4),
-						z: buffer.readFloatLE(chunk.offset + 8),
+					if (chunk.header.dataLen >= 12) {
+						tracker.trgtpos = {
+							x: buffer.readFloatLE(chunk.offset),
+							y: buffer.readFloatLE(chunk.offset + 4),
+							z: buffer.readFloatLE(chunk.offset + 8),
+						}
 					}
 					break
 				case PSN_DATA_TRACKER_TIMESTAMP:
-					tracker.timestamp = buffer.readBigUInt64LE(chunk.offset)
+					if (chunk.header.dataLen >= 8) {
+						tracker.timestamp = buffer.readBigUInt64LE(chunk.offset)
+					}
 					break
 			}
 		}
@@ -346,7 +382,12 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		variableValues['system_name'] = this.systemName
 		variableValues['tracker_count'] = this.trackers.size
 
-		for (const tracker of this.trackers.values()) {
+		// Respect configured max trackers
+		const max = Math.max(1, Math.min(255, this.config.max_trackers ?? 6))
+		const trackersSorted = Array.from(this.trackers.values())
+			.sort((a, b) => a.id - b.id)
+			.slice(0, max)
+		for (const tracker of trackersSorted) {
 			const prefix = `tracker_${tracker.id}_`
 
 			if (tracker.name !== undefined) {
@@ -354,37 +395,37 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			}
 
 			if (tracker.pos) {
-				variableValues[`${prefix}pos_x`] = tracker.pos.x
-				variableValues[`${prefix}pos_y`] = tracker.pos.y
-				variableValues[`${prefix}pos_z`] = tracker.pos.z
+				variableValues[`${prefix}pos_x`] = this.format3(tracker.pos.x)
+				variableValues[`${prefix}pos_y`] = this.format3(tracker.pos.y)
+				variableValues[`${prefix}pos_z`] = this.format3(tracker.pos.z)
 			}
 
 			if (tracker.speed) {
-				variableValues[`${prefix}speed_x`] = tracker.speed.x
-				variableValues[`${prefix}speed_y`] = tracker.speed.y
-				variableValues[`${prefix}speed_z`] = tracker.speed.z
+				variableValues[`${prefix}speed_x`] = this.format3(tracker.speed.x)
+				variableValues[`${prefix}speed_y`] = this.format3(tracker.speed.y)
+				variableValues[`${prefix}speed_z`] = this.format3(tracker.speed.z)
 			}
 
 			if (tracker.ori) {
-				variableValues[`${prefix}ori_x`] = tracker.ori.x
-				variableValues[`${prefix}ori_y`] = tracker.ori.y
-				variableValues[`${prefix}ori_z`] = tracker.ori.z
+				variableValues[`${prefix}ori_x`] = this.format3(tracker.ori.x)
+				variableValues[`${prefix}ori_y`] = this.format3(tracker.ori.y)
+				variableValues[`${prefix}ori_z`] = this.format3(tracker.ori.z)
 			}
 
 			if (tracker.validity !== undefined) {
-				variableValues[`${prefix}validity`] = tracker.validity
+				variableValues[`${prefix}validity`] = this.format3(tracker.validity)
 			}
 
 			if (tracker.accel) {
-				variableValues[`${prefix}accel_x`] = tracker.accel.x
-				variableValues[`${prefix}accel_y`] = tracker.accel.y
-				variableValues[`${prefix}accel_z`] = tracker.accel.z
+				variableValues[`${prefix}accel_x`] = this.format3(tracker.accel.x)
+				variableValues[`${prefix}accel_y`] = this.format3(tracker.accel.y)
+				variableValues[`${prefix}accel_z`] = this.format3(tracker.accel.z)
 			}
 
 			if (tracker.trgtpos) {
-				variableValues[`${prefix}trgtpos_x`] = tracker.trgtpos.x
-				variableValues[`${prefix}trgtpos_y`] = tracker.trgtpos.y
-				variableValues[`${prefix}trgtpos_z`] = tracker.trgtpos.z
+				variableValues[`${prefix}trgtpos_x`] = this.format3(tracker.trgtpos.x)
+				variableValues[`${prefix}trgtpos_y`] = this.format3(tracker.trgtpos.y)
+				variableValues[`${prefix}trgtpos_z`] = this.format3(tracker.trgtpos.z)
 			}
 
 			if (tracker.timestamp !== undefined) {

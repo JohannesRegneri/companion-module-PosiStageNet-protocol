@@ -16,7 +16,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					type: 'number',
 					label: 'Tracker ID',
 					default: 1,
-					min: 1,
+					min: 0,
 					max: 255,
 				},
 			],

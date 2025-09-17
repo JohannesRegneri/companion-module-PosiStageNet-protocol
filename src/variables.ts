@@ -9,7 +9,10 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 
 	// Since trackers are detected dynamically, we'll define a reasonable set of potential tracker variables
 	// The actual values will be set when trackers are detected
-	for (let i = 1; i <= 32; i++) {
+	const max = Math.max(1, Math.min(255, self.config.max_trackers ?? 6))
+	// Include tracker id 0 explicitly if used by some PSN sources
+	const start = 0
+	for (let i = start; i <= max; i++) {
 		const prefix = `tracker_${i}_`
 		variables.push(
 			{ variableId: `${prefix}name`, name: `Tracker ${i} Name` },
