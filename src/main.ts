@@ -4,6 +4,7 @@ import { UpdateVariableDefinitions } from './variables.js'
 import { UpgradeScripts } from './upgrades.js'
 import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
+import { UpdatePresets } from './presets.js'
 import * as dgram from 'dgram'
 import type { RemoteInfo } from 'dgram'
 
@@ -51,22 +52,26 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	private trackers = new Map<number, TrackerData>()
 	private systemName = ''
 	private packetTimestamps: number[] = []
+	private connectionLostTimer?: NodeJS.Timeout
+	private currentStatus: InstanceStatus = InstanceStatus.Ok
 
 	constructor(internal: unknown) {
 		super(internal)
 	}
 
 	/**
-	 * Format a number rounded to at most 3 decimal places.
+	 * Format a number rounded to a configurable number of decimal places.
 	 * - Returns '' for non-finite numbers
 	 * - Trims trailing zeros (e.g., 1.2 not 1.200)
 	 */
-	private format3(value: number): string {
+	private format(value: number): string {
 		if (!Number.isFinite(value)) return ''
-		const rounded = Math.round(value * 1000) / 1000
-		// Avoid "-0"
+		const decimals = typeof this.config?.decimals === 'number' && this.config.decimals >= 0 ? this.config.decimals : 3
+		const factor = Math.pow(10, decimals)
+		const rounded = Math.round(value * factor) / factor
 		if (Object.is(rounded, -0)) return '0'
-		return String(rounded)
+		return rounded.toFixed(decimals)
+		return rounded.toFixed(decimals).replace(/\.?0+$/, '')
 	}
 
 	private isMulticastAddress(host: string): boolean {
@@ -95,6 +100,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		this.updateActions() // export actions
 		this.updateFeedbacks() // export feedbacks
+		this.updatePresets() // export Presets
 		this.updateVariableDefinitions() // export variable definitions
 	}
 	// When module gets deleted
@@ -124,6 +130,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		UpdateFeedbacks(this)
 	}
 
+	updatePresets(): void {
+		UpdatePresets(this)
+	}
+
 	updateVariableDefinitions(): void {
 		UpdateVariableDefinitions(this)
 	}
@@ -150,7 +160,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				// Join multicast group if the host is a multicast address
 				if (this.isMulticastAddress(this.config.host)) {
 					try {
-						this.socket!.addMembership(this.config.host)
+						// bind fixes a problem: the operating system will choose one interface and will add membership to it (sometimes the wrong one)
+						this.socket!.addMembership(this.config.host, this.config.advancedOptions ? this.config.bind : undefined)
 						this.log('info', `✅ Successfully joined multicast group ${this.config.host}`)
 					} catch (error) {
 						this.log('error', `❌ Failed to join multicast group ${this.config.host}: ${error}`)
@@ -192,14 +203,35 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.socket.removeAllListeners()
 			this.socket.close()
 			this.socket = undefined
+
+			if (this.connectionLostTimer) {
+				clearTimeout(this.connectionLostTimer)
+				delete this.connectionLostTimer
+			}
 		}
 		this.trackers.clear()
 	}
 
 	private handleMessage(buffer: Buffer, _rinfo: RemoteInfo): void {
 		try {
+			// Reset connection lost timer when we receive a message
+			if (this.connectionLostTimer) {
+				clearTimeout(this.connectionLostTimer)
+				// Reset InstanceState
+				if (this.currentStatus !== InstanceStatus.Ok) {
+					this.updateStatus(InstanceStatus.Ok)
+					this.currentStatus = InstanceStatus.Ok
+				}
+			}
+
+			// Set a new timer to detect connection loss
+			this.connectionLostTimer = setTimeout(() => {
+				this.handleConnectionLoss()
+			}, 1500) // 1.5 seconds grace period
+
 			// Record this incoming packet for packet rate calculations
 			this.recordPacket()
+
 			const chunks = this.parseChunks(buffer, 0, buffer.length)
 			for (const chunk of chunks) {
 				this.processChunk(chunk, buffer)
@@ -209,11 +241,20 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 	}
 
+	private handleConnectionLoss(): void {
+		this.log('warn', 'Connection appears to be lost - resetting packet rate')
+		this.updateStatus(InstanceStatus.Disconnected, `Package Rate droped to 0`)
+		this.currentStatus = InstanceStatus.Disconnected
+		this.packetTimestamps = [] // Clear all stored timestamps
+		this.updateTrackerVariables()
+	}
+
 	// Record a packet arrival and trim timestamps older than 1s
 	private recordPacket(): void {
 		const now = Date.now()
 		this.packetTimestamps.push(now)
 		const cutoff = now - 1000
+
 		// Remove outdated entries from the front
 		while (this.packetTimestamps.length > 0 && this.packetTimestamps[0] < cutoff) {
 			this.packetTimestamps.shift()
@@ -412,52 +453,51 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		//Compare TrackerLists and create Variables
 		if (this.updateAndCheckKeyChanges()) {
 			this.updateVariableDefinitions()
+			this.updatePresets()
 		}
 
 		// use Tracker IDs
-		const max = Math.max(1, Math.min(255, 1))
 		const trackersSorted = Array.from(this.trackers.values())
-			.sort((a, b) => a.id - b.id)
-			.slice(0, max)
 		for (const tracker of trackersSorted) {
+			//this.log('debug', `${JSON.stringify(trackersSorted)}pos_x`)
 			const prefix = `tracker_${tracker.id}_`
 
 			if (tracker.name !== undefined) {
 				variableValues[`${prefix}name`] = tracker.name
 			}
 
-			if (tracker.pos) {
-				variableValues[`${prefix}pos_x`] = this.format3(tracker.pos.x)
-				variableValues[`${prefix}pos_y`] = this.format3(tracker.pos.y)
-				variableValues[`${prefix}pos_z`] = this.format3(tracker.pos.z)
+			if (tracker.pos && this.config.usePos) {
+				variableValues[`${prefix}pos_x`] = this.format(tracker.pos.x)
+				variableValues[`${prefix}pos_y`] = this.format(tracker.pos.y)
+				variableValues[`${prefix}pos_z`] = this.format(tracker.pos.z)
 			}
 
-			if (tracker.speed) {
-				variableValues[`${prefix}speed_x`] = this.format3(tracker.speed.x)
-				variableValues[`${prefix}speed_y`] = this.format3(tracker.speed.y)
-				variableValues[`${prefix}speed_z`] = this.format3(tracker.speed.z)
+			if (tracker.speed && this.config.useSpeed) {
+				variableValues[`${prefix}speed_x`] = this.format(tracker.speed.x)
+				variableValues[`${prefix}speed_y`] = this.format(tracker.speed.y)
+				variableValues[`${prefix}speed_z`] = this.format(tracker.speed.z)
 			}
 
-			if (tracker.ori) {
-				variableValues[`${prefix}ori_x`] = this.format3(tracker.ori.x)
-				variableValues[`${prefix}ori_y`] = this.format3(tracker.ori.y)
-				variableValues[`${prefix}ori_z`] = this.format3(tracker.ori.z)
+			if (tracker.ori && this.config.useOri) {
+				variableValues[`${prefix}ori_x`] = this.format(tracker.ori.x)
+				variableValues[`${prefix}ori_y`] = this.format(tracker.ori.y)
+				variableValues[`${prefix}ori_z`] = this.format(tracker.ori.z)
 			}
 
 			if (tracker.validity !== undefined) {
-				variableValues[`${prefix}validity`] = this.format3(tracker.validity)
+				variableValues[`${prefix}validity`] = this.format(tracker.validity)
 			}
 
-			if (tracker.accel) {
-				variableValues[`${prefix}accel_x`] = this.format3(tracker.accel.x)
-				variableValues[`${prefix}accel_y`] = this.format3(tracker.accel.y)
-				variableValues[`${prefix}accel_z`] = this.format3(tracker.accel.z)
+			if (tracker.accel && this.config.useAccel) {
+				variableValues[`${prefix}accel_x`] = this.format(tracker.accel.x)
+				variableValues[`${prefix}accel_y`] = this.format(tracker.accel.y)
+				variableValues[`${prefix}accel_z`] = this.format(tracker.accel.z)
 			}
 
-			if (tracker.trgtpos) {
-				variableValues[`${prefix}trgtpos_x`] = this.format3(tracker.trgtpos.x)
-				variableValues[`${prefix}trgtpos_y`] = this.format3(tracker.trgtpos.y)
-				variableValues[`${prefix}trgtpos_z`] = this.format3(tracker.trgtpos.z)
+			if (tracker.trgtpos && this.config.useTrgtPos) {
+				variableValues[`${prefix}trgtpos_x`] = this.format(tracker.trgtpos.x)
+				variableValues[`${prefix}trgtpos_y`] = this.format(tracker.trgtpos.y)
+				variableValues[`${prefix}trgtpos_z`] = this.format(tracker.trgtpos.z)
 			}
 
 			if (tracker.timestamp !== undefined) {
@@ -467,6 +507,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		this.setVariableValues(variableValues)
 	}
+	//this.log('debug', `${JSON.stringify(variableValues)}`)
 }
 
 runEntrypoint(ModuleInstance, UpgradeScripts)
