@@ -47,6 +47,7 @@ interface ChunkHeader {
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
 	private socket?: dgram.Socket
+	public currentTrackerList: number[] = []
 	private trackers = new Map<number, TrackerData>()
 	private systemName = ''
 	private packetTimestamps: number[] = []
@@ -73,6 +74,16 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		if (parts.length !== 4) return false
 		const firstOctet = parseInt(parts[0], 10)
 		return firstOctet >= 224 && firstOctet <= 239
+	}
+
+	public updateAndCheckKeyChanges(): boolean {
+		const currentKeys = Array.from(this.trackers.keys())
+
+		if (JSON.stringify(currentKeys) !== JSON.stringify(this.currentTrackerList)) {
+			this.currentTrackerList = currentKeys
+			return true
+		}
+		return false
 	}
 
 	async init(config: ModuleConfig): Promise<void> {
@@ -398,8 +409,13 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		variableValues['system_tracker_ids'] = JSON.stringify(Array.from(this.trackers.keys()))
 		variableValues['system_packet_rate'] = this.packetTimestamps.length
 
-		// Respect configured max trackers
-		const max = Math.max(1, Math.min(255, this.config.max_trackers ?? 6))
+		//Compare TrackerLists and create Variables
+		if (this.updateAndCheckKeyChanges()) {
+			this.updateVariableDefinitions()
+		}
+
+		// use Tracker IDs
+		const max = Math.max(1, Math.min(255, 1))
 		const trackersSorted = Array.from(this.trackers.values())
 			.sort((a, b) => a.id - b.id)
 			.slice(0, max)
