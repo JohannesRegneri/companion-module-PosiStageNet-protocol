@@ -49,6 +49,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	private socket?: dgram.Socket
 	private trackers = new Map<number, TrackerData>()
 	private systemName = ''
+	private packetTimestamps: number[] = []
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -186,12 +187,25 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	private handleMessage(buffer: Buffer, _rinfo: RemoteInfo): void {
 		try {
+			// Record this incoming packet for packet rate calculations
+			this.recordPacket()
 			const chunks = this.parseChunks(buffer, 0, buffer.length)
 			for (const chunk of chunks) {
 				this.processChunk(chunk, buffer)
 			}
 		} catch (error) {
 			this.log('error', `Failed to parse message: ${error}`)
+		}
+	}
+
+	// Record a packet arrival and trim timestamps older than 1s
+	private recordPacket(): void {
+		const now = Date.now()
+		this.packetTimestamps.push(now)
+		const cutoff = now - 1000
+		// Remove outdated entries from the front
+		while (this.packetTimestamps.length > 0 && this.packetTimestamps[0] < cutoff) {
+			this.packetTimestamps.shift()
 		}
 	}
 
@@ -380,7 +394,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		// Update system variables
 		variableValues['system_name'] = this.systemName
-		variableValues['tracker_count'] = this.trackers.size
+		variableValues['system_tracker_count'] = this.trackers.size
+		variableValues['system_tracker_ids'] = JSON.stringify(Array.from(this.trackers.keys()))
+		variableValues['system_packet_rate'] = this.packetTimestamps.length
 
 		// Respect configured max trackers
 		const max = Math.max(1, Math.min(255, this.config.max_trackers ?? 6))
