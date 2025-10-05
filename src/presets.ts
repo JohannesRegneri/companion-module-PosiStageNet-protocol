@@ -29,9 +29,72 @@ export function UpdatePresets(self: ModuleInstance): void {
 					show_topbar: false,
 				},
 				steps: [],
-				feedbacks: [],
+				feedbacks: [
+					{
+						feedbackId: 'tracker_moving',
+						options: {
+							tracker_id: `${i}`,
+							tracker_type: 'speed',
+							tracker_axis: 'y',
+							fg: combineRgb(6, 80, 156),
+							bg: combineRgb(0, 0, 0),
+							fg_default: combineRgb(255, 255, 255),
+							bg_default: combineRgb(0, 0, 0),
+							fg_down: combineRgb(110, 210, 28),
+							bg_down: combineRgb(0, 0, 0),
+						},
+					},
+				],
 			}
 		}
 	}
+	presets[`Name`] = {
+		type: 'button',
+		category: `Status`,
+		name: `Name`,
+		style: {
+			text: `$(psn:system_name)\n$(psn:system_tracker_count) Trackers`,
+			size: 'auto',
+			color: combineRgb(255, 255, 255),
+			bgcolor: combineRgb(0, 0, 0),
+			show_topbar: false,
+		},
+		steps: [],
+		feedbacks: [
+			{
+				feedbackId: 'connection_status',
+				options: {},
+				style: {
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 128, 0),
+				},
+			},
+		],
+	}
+
+	presets[`packageRate`] = {
+		type: 'button',
+		category: `Status`,
+		name: `Package Rate`,
+		style: {
+			text: `Rate:\n$(psn:system_packet_rate)s`,
+			size: 'auto',
+			color: combineRgb(255, 255, 255),
+			bgcolor: combineRgb(0, 0, 0),
+			show_topbar: false,
+		},
+		steps: [],
+		feedbacks: [
+			{
+				feedbackId: 'connection_status',
+				options: {},
+				style: {
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 128, 0),
+				},
+			},
+		],
+	}
+
 	self.setPresetDefinitions(presets)
 }

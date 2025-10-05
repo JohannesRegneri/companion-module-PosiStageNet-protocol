@@ -53,7 +53,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	private systemName = ''
 	private packetTimestamps: number[] = []
 	private connectionLostTimer?: NodeJS.Timeout
-	private currentStatus: InstanceStatus = InstanceStatus.Ok
+	public currentStatus: InstanceStatus = InstanceStatus.Ok
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -115,6 +115,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		await this.initConnection()
 		// Rebuild variable definitions in case max_trackers changed
 		this.updateVariableDefinitions()
+		this.updatePresets()
+		this.updateFeedbacks()
 	}
 
 	// Return config fields for web config
@@ -454,6 +456,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		if (this.updateAndCheckKeyChanges()) {
 			this.updateVariableDefinitions()
 			this.updatePresets()
+			this.updateFeedbacks()
 		}
 
 		// use Tracker IDs
@@ -506,6 +509,8 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 
 		this.setVariableValues(variableValues)
+
+		this.checkFeedbacks()
 	}
 	//this.log('debug', `${JSON.stringify(variableValues)}`)
 }
