@@ -3,8 +3,8 @@ import type { ModuleInstance } from './main.js'
 export function UpdateVariableDefinitions(self: ModuleInstance): void {
 	// Start with basic system variables
 	const variables = [
-		{ variableId: 'system_name', name: 'PSN System Name' },
-		{ variableId: 'system_tracker_count', name: 'Number of Active Trackers' },
+		{ variableId: 'system_name', name: 'PSN system name' },
+		{ variableId: 'system_tracker_count', name: 'Number of active trackers' },
 		{ variableId: 'system_tracker_ids', name: 'List of available tracker ids' },
 		{ variableId: 'system_packet_rate', name: 'Rate of packets per second' },
 	]

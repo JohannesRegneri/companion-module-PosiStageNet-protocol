@@ -104,7 +104,7 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 		{
 			type: 'checkbox',
 			id: 'customFeatures',
-			label: 'Only use specific features of Tracker IDs',
+			label: 'Only use specific features of Trackers',
 			width: 12,
 			default: false,
 			isVisible: (options) => options.advancedOptions === true,
