@@ -26,7 +26,9 @@ The module creates variables for each detected tracker:
 System variables:
 
 - `system_name` - PSN system name
-- `tracker_count` - Number of active trackers
+- `system_tracker_count` - Number of active trackers
+- `system_tracker_ids` - List of available tracker ids
+- `system_packet_rate` - Rate of packets per second
 
 See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
