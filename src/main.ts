@@ -161,7 +161,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		try {
 			this.log('info', `🚀 Initializing NATIVE PosiStageNet connection to ${this.config.host}:${this.config.port}`)
 
-			this.socket = dgram.createSocket('udp4')
+			this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true })
 
 			this.socket.on('message', (msg: Buffer, rinfo: RemoteInfo) => {
 				this.handleMessage(msg, rinfo)
