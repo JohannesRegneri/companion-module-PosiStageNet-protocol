@@ -15,6 +15,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	self.setFeedbackDefinitions({
 		tracker_active: {
 			name: 'Tracker Active',
+			description: '',
 			type: 'boolean',
 			defaultStyle: {
 				bgcolor: ColorOrange,
@@ -38,6 +39,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		},
 		tracker_moving: {
 			name: 'Tracker Moving',
+			description: "Changes the button's style when the value is below or above 0.",
 			type: 'advanced',
 			options: [
 				{

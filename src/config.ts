@@ -1,4 +1,5 @@
 import { Regex, type SomeCompanionConfigField } from '@companion-module/base'
+import type { ModuleInstance } from './main.js'
 
 export interface ModuleConfig {
 	host: string
@@ -18,7 +19,7 @@ export interface ModuleConfig {
 	useTimestamp?: boolean
 }
 
-export function GetConfigFields(): SomeCompanionConfigField[] {
+export function GetConfigFields(self: ModuleInstance): SomeCompanionConfigField[] {
 	return [
 		{
 			type: 'static-text',
@@ -54,12 +55,14 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			default: false,
 		},
 		{
-			type: 'textinput',
+			type: 'dropdown',
 			id: 'bind',
 			label: 'Bind to specific IP',
 			width: 6,
+			choices: self.localIPs,
+			allowCustom: true,
 			tooltip: 'the IP address of the network interface to bind to. default is $(internal:bind_ip)',
-			regex: Regex.IP,
+			regex: Regex.HOSTNAME,
 			default: '0.0.0.0',
 			isVisible: (options) => options.advancedOptions === true,
 		},

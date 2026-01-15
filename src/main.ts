@@ -6,6 +6,7 @@ import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import * as dgram from 'dgram'
+import os from 'os'
 import type { RemoteInfo } from 'dgram'
 
 // Protocol constants
@@ -47,6 +48,7 @@ interface ChunkHeader {
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
+	public localIPs: { id: string; label: string }[] = []
 	private socket?: dgram.Socket
 	public currentTrackerList: number[] = []
 	private trackers = new Map<number, TrackerData>()
@@ -57,6 +59,21 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	constructor(internal: unknown) {
 		super(internal)
+
+		// Get local IPs for Config
+		this.localIPs = []
+		const interfaces = os.networkInterfaces()
+		const interface_names = Object.keys(interfaces)
+		interface_names.forEach((nic) => {
+			const ips = interfaces[nic]
+			if (ips) {
+				ips.forEach((ip) => {
+					if (ip.family == 'IPv4') {
+						this.localIPs.push({ id: ip.address, label: `${nic}: ${ip.address}` })
+					}
+				})
+			}
+		})
 	}
 
 	/**
@@ -121,7 +138,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	// Return config fields for web config
 	getConfigFields(): SomeCompanionConfigField[] {
-		return GetConfigFields()
+		return GetConfigFields(this)
 	}
 
 	updateActions(): void {
@@ -144,7 +161,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		try {
 			this.log('info', `🚀 Initializing NATIVE PosiStageNet connection to ${this.config.host}:${this.config.port}`)
 
-			this.socket = dgram.createSocket('udp4')
+			this.socket = dgram.createSocket({ type: 'udp4', reuseAddr: true })
 
 			this.socket.on('message', (msg: Buffer, rinfo: RemoteInfo) => {
 				this.handleMessage(msg, rinfo)
@@ -157,7 +174,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 			this.socket.on('listening', () => {
 				const address = this.socket!.address()
-				this.log('info', `🎧 Successfully bound to ${address.address}:${address.port}`)
+				this.log('info', `🎧 Successfully bound to ${this.config.bind}:${address.port}`)
 
 				// Join multicast group if the host is a multicast address
 				if (this.isMulticastAddress(this.config.host)) {
